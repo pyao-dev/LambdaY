@@ -2,11 +2,12 @@ BasedOnStyle: LLVM
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
-PointerAlignment: Right
+PointerAlignment: Left
 DerivePointerAlignment: false
 BreakBeforeBraces: Attach
-ColumnLimit: 100
+ColumnLimit: 120
 AllowShortFunctionsOnASingleLine: Empty
 AllowShortIfStatementsOnASingleLine: Never
 SortIncludes: CaseSensitive
 Language: Cpp
+AlignConsecutiveDeclarations: true
