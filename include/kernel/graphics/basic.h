@@ -5,6 +5,7 @@
 namespace graphics {
 
 bool initialize(void* system_table);
+void clear(ui32 color);
 void put_pixel(ui32 x, ui32 y, ui32 color);
 
 ui32 get_width();

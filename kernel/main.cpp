@@ -17,9 +17,7 @@ extern "C" __attribute__((ms_abi, noreturn)) void kernel_entry(void*, void* syst
     ui32 line_length   = screen_width < screen_height ? screen_width : screen_height;
 
     serial::write("Clear the screen and draw demo lines\n");
-    for (ui32 x = 0; x < screen_width; x++)
-        for (ui32 y = 0; y < screen_height; y++)
-            graphics::put_pixel(x, y, 0);
+    graphics::clear(0);
 
     for (ui32 offset = 0; offset < line_length; ++offset) {
         graphics::put_pixel(offset, 200, 0xff0000);
@@ -27,7 +25,7 @@ extern "C" __attribute__((ms_abi, noreturn)) void kernel_entry(void*, void* syst
         graphics::put_pixel(offset, 300, 0x0000ff);
     }
 
-    pf::draw_text(20, 20, "你好！欢迎来到 LambdaY 操作系统！中英混排 Test 测试。", 0xffffff, 0x00);
+    pf::draw_text(20, 20, "你好！欢迎来到 LambdaY 操作系统！这是：中英混排 Test 测试。", 0xffffff, 0x00);
 
     for (;;) {
         asm volatile("hlt");

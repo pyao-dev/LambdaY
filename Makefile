@@ -14,14 +14,14 @@ OVMF_VARS ?= /usr/share/OVMF/OVMF_VARS_4M.fd
 OVMF_VARS_COPY := $(OUT_DIR)/OVMF_VARS.fd
 IMAGE_SIZE ?= 64M
 
-CPP_FILES := $(shell find "$(ROOT_DIR)" -path "$(ROOT_DIR)/gnu-efi" -prune -o -type f -name '*.cpp' -print)
-H_FILES := $(shell find . \( -path "./gnu-efi" -o -path "./include/kernel/graphics/pf/fontdata" \) -prune -o -type f -name '*.h' -print)
+CPP_FILES := $(shell find "$(ROOT_DIR)/kernel" -type f -name '*.cpp' -print)
 CPP_OBJECTS := $(patsubst $(ROOT_DIR)/%.cpp,$(OUT_DIR)/%.o,$(CPP_FILES))
+CPP_DEPENDENCIES := $(CPP_OBJECTS:.o=.d)
 KERNEL_BIN := $(OUT_DIR)/kernel.bin
 
 KERNEL_CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Werror -ffreestanding \
     -fno-stack-protector -fno-exceptions -fno-rtti -fno-use-cxa-atexit \
-    -fno-asynchronous-unwind-tables -fno-unwind-tables -fPIE -mno-red-zone \
+	-fno-asynchronous-unwind-tables -fno-unwind-tables -fPIE -MMD -MP -mno-red-zone \
 	-m64 -DGNU_EFI_USE_MS_ABI -I$(ROOT_DIR)/include/global \
 	-I$(ROOT_DIR)/include/kernel -I$(ROOT_DIR)/gnu-efi/inc \
 	-I$(ROOT_DIR)/gnu-efi/inc/x86_64 -I$(ROOT_DIR)/gnu-efi/inc/protocol
@@ -29,6 +29,8 @@ KERNEL_LDFLAGS := -mi386pep -nostdlib -T $(ROOT_DIR)/linker.ld \
     --subsystem 10 --image-base 0x100000
 
 .PHONY: all boot kernel image run format clean check-tools
+
+-include $(CPP_DEPENDENCIES)
 
 all: image
 
@@ -38,10 +40,10 @@ boot:
 
 kernel: $(KERNEL_BIN)
 
-$(OUT_DIR)/%.o: $(ROOT_DIR)/%.cpp $(H_FILES)
+$(OUT_DIR)/%.o: $(ROOT_DIR)/%.cpp
 	@mkdir -p "$(dir $@)"
 	@echo " CXX $< -> $@"
-	@$(CXX) $(KERNEL_CXXFLAGS) -c "$<" -o "$@"
+	@$(CXX) $(KERNEL_CXXFLAGS) -MF "$(@:.o=.d)" -c "$<" -o "$@"
 
 $(KERNEL_BIN): $(CPP_OBJECTS) $(ROOT_DIR)/linker.ld
 	@mkdir -p "$(dir $@)"
@@ -71,7 +73,15 @@ run: image
 	    -serial stdio
 
 format:
-	@$(CLANG_FORMAT) -i "$(ROOT_DIR)/boot/boot.c" $(CPP_FILES) $(H_FILES)
+	@$(CLANG_FORMAT) -i "$(ROOT_DIR)/boot/boot.c" $(CPP_FILES)
+
+check-tools:
+	@command -v "$(CC)" >/dev/null || { echo "Required tool not found: $(CC)" >&2; exit 1; }
+	@command -v "$(CXX)" >/dev/null || { echo "Required tool not found: $(CXX)" >&2; exit 1; }
+	@command -v "$(LD)" >/dev/null || { echo "Required tool not found: $(LD)" >&2; exit 1; }
+	@command -v mformat >/dev/null || { echo "Required tool not found: mformat" >&2; exit 1; }
+	@command -v mcopy >/dev/null || { echo "Required tool not found: mcopy" >&2; exit 1; }
+	@echo "All required build tools are available."
 
 clean:
 	@echo "Cleaning old files"

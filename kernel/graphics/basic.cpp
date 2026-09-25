@@ -32,6 +32,15 @@ bool checked_multiply(ui64 left, ui64 right, ui64& result) {
     return true;
 }
 
+ui32 encode_pixel(ui32 color) {
+    const ui8 red   = static_cast<ui8>((color >> 16) & 0xff);
+    const ui8 green = static_cast<ui8>((color >> 8) & 0xff);
+    const ui8 blue  = static_cast<ui8>(color & 0xff);
+    return framebuffer.pixel_format == PixelRedGreenBlueReserved8BitPerColor
+               ? (static_cast<ui32>(red) << 16) | (static_cast<ui32>(green) << 8) | blue
+               : (static_cast<ui32>(blue) << 16) | (static_cast<ui32>(green) << 8) | red;
+}
+
 } // namespace
 
 namespace graphics {
@@ -76,6 +85,21 @@ bool initialize(void* system_table) {
     return true;
 }
 
+void clear(ui32 color) {
+    if (!framebuffer.initialized) {
+        return;
+    }
+
+    const ui32 pixel = encode_pixel(color);
+    for (ui32 y = 0; y < framebuffer.height; ++y) {
+        volatile ui32* row = reinterpret_cast<volatile ui32*>(
+            framebuffer.address + static_cast<ui64>(y) * framebuffer.pixels_per_scanline * sizeof(ui32));
+        for (ui32 x = 0; x < framebuffer.width; ++x) {
+            row[x] = pixel;
+        }
+    }
+}
+
 void put_pixel(ui32 x, ui32 y, ui32 color) {
     if (!framebuffer.initialized || x >= framebuffer.width || y >= framebuffer.height) {
         return;
@@ -87,14 +111,7 @@ void put_pixel(ui32 x, ui32 y, ui32 color) {
         return;
     }
 
-    ui8  red   = static_cast<ui8>((color >> 16) & 0xff);
-    ui8  green = static_cast<ui8>((color >> 8) & 0xff);
-    ui8  blue  = static_cast<ui8>(color & 0xff);
-    ui32 pixel = framebuffer.pixel_format == PixelRedGreenBlueReserved8BitPerColor
-                     ? (static_cast<ui32>(red) << 16) | (static_cast<ui32>(green) << 8) | blue
-                     : (static_cast<ui32>(blue) << 16) | (static_cast<ui32>(green) << 8) | red;
-
-    *reinterpret_cast<volatile ui32*>(framebuffer.address + byte_offset) = pixel;
+    *reinterpret_cast<volatile ui32*>(framebuffer.address + byte_offset) = encode_pixel(color);
 }
 
 ui32 get_width() {

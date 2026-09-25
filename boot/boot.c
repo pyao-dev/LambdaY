@@ -1,6 +1,8 @@
 #include <efi.h>
 #include <efilib.h>
 
+#define KERNEL_MAX_SIZE (16 * 1024 * 1024)
+
 EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table) {
     EFI_STATUS                       status;
     EFI_LOADED_IMAGE*                loaded_image;
@@ -17,7 +19,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table) {
     Print(L"Welcome to LambdaY Operating System!\r\n");
 
     status = uefi_call_wrapper(BS->HandleProtocol, 3, image, &LoadedImageProtocol, (VOID**)&loaded_image);
-    if (EFI_ERROR(status)) {
+    if (EFI_ERROR(status) || loaded_image == NULL || loaded_image->DeviceHandle == NULL) {
         Print(L"Unable to get loaded image protocol: %r\r\n", status);
         return status;
     }
@@ -64,6 +66,13 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table) {
         return status;
     }
 
+    if (file_info->FileSize == 0 || file_info->FileSize > KERNEL_MAX_SIZE) {
+        Print(L"kernel.bin has an invalid size: %lu\r\n", file_info->FileSize);
+        FreePool(file_info);
+        uefi_call_wrapper(kernel_file->Close, 1, kernel_file);
+        return EFI_BAD_BUFFER_SIZE;
+    }
+
     kernel_size = (UINTN)file_info->FileSize;
     FreePool(file_info);
     kernel_buffer = AllocatePool(kernel_size);
@@ -72,12 +81,13 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table) {
         return EFI_OUT_OF_RESOURCES;
     }
 
-    status = uefi_call_wrapper(kernel_file->Read, 3, kernel_file, &kernel_size, kernel_buffer);
+    UINTN bytes_read = kernel_size;
+    status           = uefi_call_wrapper(kernel_file->Read, 3, kernel_file, &bytes_read, kernel_buffer);
     uefi_call_wrapper(kernel_file->Close, 1, kernel_file);
-    if (EFI_ERROR(status)) {
+    if (EFI_ERROR(status) || bytes_read != kernel_size) {
         Print(L"Unable to read kernel.bin: %r\r\n", status);
         FreePool(kernel_buffer);
-        return status;
+        return EFI_LOAD_ERROR;
     }
 
     status = uefi_call_wrapper(BS->LoadImage, 6, FALSE, image, NULL, kernel_buffer, kernel_size, &kernel_image);
