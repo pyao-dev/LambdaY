@@ -97,11 +97,11 @@ void put_pixel(ui32 x, ui32 y, ui32 color) {
     *reinterpret_cast<volatile ui32*>(framebuffer.address + byte_offset) = pixel;
 }
 
-ui32 width() {
+ui32 get_width() {
     return framebuffer.width;
 }
 
-ui32 height() {
+ui32 get_height() {
     return framebuffer.height;
 }
 

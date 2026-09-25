@@ -15,7 +15,7 @@ OVMF_VARS_COPY := $(OUT_DIR)/OVMF_VARS.fd
 IMAGE_SIZE ?= 64M
 
 CPP_FILES := $(shell find "$(ROOT_DIR)" -path "$(ROOT_DIR)/gnu-efi" -prune -o -type f -name '*.cpp' -print)
-H_FILES := $(shell find "$(ROOT_DIR)" -path "$(ROOT_DIR)/gnu-efi" -prune -o -type f -name '*.h' -print)
+H_FILES := $(shell find . \( -path "./gnu-efi" -o -path "./include/kernel/graphics/pf/fontdata" \) -prune -o -type f -name '*.h' -print)
 CPP_OBJECTS := $(patsubst $(ROOT_DIR)/%.cpp,$(OUT_DIR)/%.o,$(CPP_FILES))
 KERNEL_BIN := $(OUT_DIR)/kernel.bin
 
