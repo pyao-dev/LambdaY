@@ -11,3 +11,4 @@ AllowShortIfStatementsOnASingleLine: Never
 SortIncludes: CaseSensitive
 Language: Cpp
 AlignConsecutiveDeclarations: true
+AlignConsecutiveAssignments: true

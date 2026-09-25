@@ -43,7 +43,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table) {
     }
 
     info_size = 0;
-    status = uefi_call_wrapper(kernel_file->GetInfo, 4, kernel_file, &GenericFileInfo, &info_size, NULL);
+    status    = uefi_call_wrapper(kernel_file->GetInfo, 4, kernel_file, &GenericFileInfo, &info_size, NULL);
     if (status != EFI_BUFFER_TOO_SMALL) {
         Print(L"Unable to get kernel.bin information: %r\r\n", status);
         uefi_call_wrapper(kernel_file->Close, 1, kernel_file);

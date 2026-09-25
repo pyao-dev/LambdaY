@@ -15,12 +15,13 @@ void initialize() {
 }
 
 void write(char character) {
-    while ((io::inb(kCom1 + 5) & 0x20) == 0);
+    while ((io::inb(kCom1 + 5) & 0x20) == 0)
+        ;
     io::outb(kCom1, static_cast<ui8>(character));
 }
 
 void write(const char* message) {
-    while (*message != '\0') 
+    while (*message != '\0')
         write(*message++);
 }
 
