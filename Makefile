@@ -17,6 +17,9 @@ IMAGE_SIZE ?= 64M
 CPP_FILES := $(shell find "$(ROOT_DIR)/kernel" -type f -name '*.cpp' -print)
 CPP_OBJECTS := $(patsubst $(ROOT_DIR)/%.cpp,$(OUT_DIR)/%.o,$(CPP_FILES))
 CPP_DEPENDENCIES := $(CPP_OBJECTS:.o=.d)
+ASM_FILES := $(shell find "$(ROOT_DIR)/kernel" -type f -name '*.S' -print)
+ASM_OBJECTS := $(patsubst $(ROOT_DIR)/%.S,$(OUT_DIR)/%.asm.o,$(ASM_FILES))
+KERNEL_OBJECTS := $(CPP_OBJECTS) $(ASM_OBJECTS)
 KERNEL_BIN := $(OUT_DIR)/kernel.bin
 
 KERNEL_CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Werror -ffreestanding \
@@ -27,6 +30,7 @@ KERNEL_CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Werror -ffreestanding \
 	-I$(ROOT_DIR)/gnu-efi/inc/x86_64 -I$(ROOT_DIR)/gnu-efi/inc/protocol
 KERNEL_LDFLAGS := -mi386pep -nostdlib -T $(ROOT_DIR)/linker.ld \
     --subsystem 10 --image-base 0x100000
+KERNEL_ASFLAGS := -m64 -ffreestanding -fPIE -mno-red-zone
 
 .PHONY: all boot kernel image run format clean check-tools
 
@@ -45,10 +49,15 @@ $(OUT_DIR)/%.o: $(ROOT_DIR)/%.cpp
 	@echo " CXX $< -> $@"
 	@$(CXX) $(KERNEL_CXXFLAGS) -MF "$(@:.o=.d)" -c "$<" -o "$@"
 
-$(KERNEL_BIN): $(CPP_OBJECTS) $(ROOT_DIR)/linker.ld
+$(OUT_DIR)/%.asm.o: $(ROOT_DIR)/%.S
+	@mkdir -p "$(dir $@)"
+	@echo " AS  $< -> $@"
+	@$(CC) $(KERNEL_ASFLAGS) -c "$<" -o "$@"
+
+$(KERNEL_BIN): $(KERNEL_OBJECTS) $(ROOT_DIR)/linker.ld
 	@mkdir -p "$(dir $@)"
 	@echo " LD $@"
-	@$(LD) $(KERNEL_LDFLAGS) $(CPP_OBJECTS) -o "$@"
+	@$(LD) $(KERNEL_LDFLAGS) $(KERNEL_OBJECTS) -o "$@"
 
 image: boot kernel
 	@echo "Start creating a new boot image..."
