@@ -3,51 +3,62 @@
 #include <devices/serial.h>
 #include <graphics/basic.h>
 #include <graphics/pf/lib.h>
+#include <str.h>
 #include <types.h>
 
 namespace {
 
 constexpr ui32 kTextMargin = 20;
 
-char hexadecimal_digit(ui8 value) {
-    return value < 10 ? static_cast<char>('0' + value) : static_cast<char>('A' + value - 10);
-}
-
-class ScancodeDisplay {
+class Terminal {
   public:
-    ScancodeDisplay(ui32 width, ui32 height) : width_(width), height_(height) {
-        left_ = width_ > kTextMargin * 2 ? kTextMargin : 0;
-        top_  = height_ >= 400 ? 340 : (height_ >= 64 ? 32 : 0);
+    Terminal(ui32 width, ui32 height) : width_(width), height_(height) {
+        left_ = 20;
+        top_  = 100;
         x_    = left_;
-        y_    = height_ >= top_ + pf::glyph_height * 2 ? top_ + pf::glyph_height : top_;
-
-        pf::draw_text(left_, top_, "PS/2 扫描码：", 0xffffff, 0);
+        y_    = top_;
     }
 
-    void draw(ui8 scancode) {
-        constexpr ui32 cell_width = pf::ascii_glyph_width * 3;
-        const ui32     right      = width_ > left_ ? width_ - left_ : width_;
-
-        if (x_ >= right || right - x_ < cell_width) {
+    void draw(ui8 character) {
+        if (character == '\b') {
+            if (x_ > left_) {
+                x_ -= pf::ascii_glyph_width;
+                pf::draw_ascii(x_, y_, ' ', 0xffffff, 0);
+            }
+            return;
+        }
+        if (character == '\r') {
+            x_ = left_;
+            return;
+        }
+        if (character == '\n') {
             x_ = left_;
             y_ += pf::glyph_height;
+            advance_line_if_needed();
+            return;
         }
-        if (y_ >= height_ || height_ - y_ < pf::glyph_height) {
-            x_ = left_;
-            y_ = height_ >= top_ + pf::glyph_height * 2 ? top_ + pf::glyph_height : top_;
+        if (character < 0x20 || character > 0x7e) {
+            return;
         }
 
-        const char text[] = {
-            hexadecimal_digit(static_cast<ui8>(scancode >> 4)),
-            hexadecimal_digit(static_cast<ui8>(scancode & 0x0f)),
-            ' ',
-            '\0',
-        };
-        pf::draw_text(x_, y_, text, 0xffffff, 0);
-        x_ += cell_width;
+        if (x_ > width_ || width_ - x_ < pf::ascii_glyph_width) {
+            x_ = left_;
+            y_ += pf::glyph_height;
+            advance_line_if_needed();
+        }
+        pf::draw_ascii(x_, y_, character, 0xffffff, 0);
+        x_ += pf::ascii_glyph_width;
     }
 
   private:
+    void advance_line_if_needed() {
+        if (height_ == 0 || y_ + pf::glyph_height <= height_) {
+            return;
+        }
+        graphics::clear(0);
+        y_ = top_;
+    }
+
     ui32 width_  = 0;
     ui32 height_ = 0;
     ui32 left_   = 0;
@@ -70,24 +81,30 @@ extern "C" __attribute__((ms_abi, noreturn)) void kernel_entry(void*, void* syst
 
     ui32 screen_width  = graphics::get_width();
     ui32 screen_height = graphics::get_height();
-    ui32 line_length   = screen_width < screen_height ? screen_width : screen_height;
 
-    serial::write("Clear the screen and draw demo lines\n");
+    serial::write("Screen info: size ");
+    serial::write(int2str(screen_width));
+    serial::write('x');
+    serial::write(int2str(screen_height));
+
+    serial::write("\nClear the screen and draw demo lines\n");
     graphics::clear(0);
 
+    /*
     for (ui32 offset = 0; offset < line_length; ++offset) {
         graphics::put_pixel(offset, 200, 0xff0000);
         graphics::put_pixel(offset, 250, 0x00ff00);
         graphics::put_pixel(offset, 300, 0x0000ff);
     }
+    */
 
-    pf::draw_text(20, 20, "你好！欢迎来到 LambdaY 操作系统！这是：中英混排 Test 测试。", 0xffffff, 0x00);
+    pf::draw_text(20, 20, "你好！欢迎来到 LambdaY 操作系统！这是：中英混排 Test 测试。");
 
     interrupts::initialize_idt();
     interrupts::initialize_pic();
     if (!keyboard::initialize()) {
         serial::write("Failed to initialize the PS/2 keyboard.\n");
-        pf::draw_text(20, 340, "PS/2 键盘初始化失败！", 0xff0000, 0);
+        pf::draw_text(20, 60, "PS/2 键盘初始化失败！", 0xff0000, 0);
         for (;;) {
             asm volatile("hlt");
         }
@@ -95,17 +112,20 @@ extern "C" __attribute__((ms_abi, noreturn)) void kernel_entry(void*, void* syst
     interrupts::enable_keyboard_irq();
     serial::write("PS/2 keyboard initialized; IRQ1 enabled.\n");
 
-    ScancodeDisplay display(screen_width, screen_height);
+    Terminal terminal(screen_width, screen_height);
     interrupts::enable();
 
+    pf::draw_text(20, 60, "PS/2键盘初始化成功，现在你可以键入一些内容");
+
     for (;;) {
-        ui8 scancode = 0;
-        while (keyboard::pop_scancode(scancode)) {
-            display.draw(scancode);
+        ui8 character = 0;
+        while (keyboard::pop_ascii(character)) {
+            terminal.draw(character);
+            serial::write(static_cast<char>(character));
         }
 
         interrupts::disable();
-        if (keyboard::has_scancode()) {
+        if (keyboard::has_ascii()) {
             interrupts::enable();
             continue;
         }
