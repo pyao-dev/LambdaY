@@ -10,6 +10,26 @@ enum {
     BootPixelFormatBgr = 1,
 };
 
+// EFI memory types copied by the bootloader. Keep these values independent of
+// gnu-efi so the kernel can inspect the memory map after ExitBootServices.
+enum {
+    BootMemoryReserved            = 0,
+    BootMemoryLoaderCode         = 1,
+    BootMemoryLoaderData         = 2,
+    BootMemoryBootServicesCode   = 3,
+    BootMemoryBootServicesData   = 4,
+    BootMemoryRuntimeCode        = 5,
+    BootMemoryRuntimeData        = 6,
+    BootMemoryConventional       = 7,
+    BootMemoryUnusable           = 8,
+    BootMemoryAcpiReclaim        = 9,
+    BootMemoryAcpiNvs            = 10,
+    BootMemoryMmio               = 11,
+    BootMemoryMmioPortSpace     = 12,
+    BootMemoryPalCode            = 13,
+    BootMemoryPersistent         = 14,
+};
+
 typedef struct {
     ui64 address;
     ui64 size;

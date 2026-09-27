@@ -4,6 +4,9 @@
 #include <devices/serial.h>
 #include <graphics/basic.h>
 #include <graphics/pf/lib.h>
+#include <memory/heap.h>
+#include <memory/paging.h>
+#include <memory/physical.h>
 #include <str.h>
 #include <types.h>
 #include <ui/terminal.h>
@@ -17,6 +20,58 @@ constexpr ui32 kStatusTextY     = 60;
 constexpr ui32 kTerminalMarginX = 20;
 constexpr ui32 kTerminalMarginY = 100;
 
+[[noreturn]] void halt_forever() {
+    for (;;) {
+        asm volatile("hlt");
+    }
+}
+
+void write_memory_stats() {
+    serial::write("Memory pages: total=");
+    serial::write(int2str(memory::total_page_count()));
+    serial::write(" free=");
+    serial::write(int2str(memory::free_page_count()));
+    serial::write(" used=");
+    serial::write(int2str(memory::used_page_count()));
+    serial::write("\n");
+}
+
+bool run_memory_self_test() {
+    const ui64 first_page = memory::page_alloc();
+    const ui64 pages      = memory::page_alloc(3);
+    if (first_page == 0 || pages == 0) {
+        serial::write("Memory self-test: page allocation failed.\n");
+        return false;
+    }
+
+    *reinterpret_cast<volatile ui8*>(first_page) = 0xa5;
+    *reinterpret_cast<volatile ui8*>(pages)      = 0x5a;
+    if (!memory::page_free(first_page) || !memory::page_free(pages, 3)) {
+        serial::write("Memory self-test: page free failed.\n");
+        return false;
+    }
+
+    auto* small = reinterpret_cast<ui8*>(memory::kmalloc(32));
+    auto* large = reinterpret_cast<ui8*>(memory::kmalloc(5000));
+    if (small == nullptr || large == nullptr) {
+        serial::write("Memory self-test: heap allocation failed.\n");
+        return false;
+    }
+    small[0]    = 0x11;
+    large[4999] = 0x22;
+    memory::kfree(small);
+    memory::kfree(large);
+
+    auto* merged = memory::kmalloc(5000);
+    if (merged == nullptr) {
+        serial::write("Memory self-test: heap reuse failed.\n");
+        return false;
+    }
+    memory::kfree(merged);
+    serial::write("Memory self-test: passed.\n");
+    return true;
+}
+
 } // namespace
 
 extern "C" __attribute__((ms_abi, noreturn)) void kernel_entry(const BootInfo* boot_info) {
@@ -28,18 +83,30 @@ extern "C" __attribute__((ms_abi, noreturn)) void kernel_entry(const BootInfo* b
         boot_info->version != LAMBDAY_BOOT_INFO_VERSION || boot_info->size < sizeof(BootInfo) ||
         boot_info->memory_map == nullptr || boot_info->memory_map_count == 0) {
         serial::write("Invalid BootInfo received from BootLoader.\n");
-        for (;;) {
-            asm volatile("hlt");
-        }
+        halt_forever();
     }
 
     serial::write("Memory map entries: ");
     serial::write(int2str(boot_info->memory_map_count));
     serial::write("\n");
 
+    if (!memory::initialize_paging(boot_info)) {
+        serial::write("Failed to initialize kernel paging.\n");
+        halt_forever();
+    }
+    if (!memory::initialize_physical(boot_info)) {
+        serial::write("Failed to initialize physical memory allocator.\n");
+        halt_forever();
+    }
+    if (!memory::initialize_heap() || !run_memory_self_test()) {
+        serial::write("Failed to initialize kernel heap.\n");
+        halt_forever();
+    }
+    write_memory_stats();
+
     if (!graphics::initialize(boot_info)) {
         serial::write("Failed to initialize graphics.\n");
-        asm volatile("hlt");
+        halt_forever();
     }
 
     ui32 screen_width  = graphics::get_width();
@@ -68,9 +135,7 @@ extern "C" __attribute__((ms_abi, noreturn)) void kernel_entry(const BootInfo* b
     if (!keyboard::initialize()) {
         serial::write("Failed to initialize the PS/2 keyboard.\n");
         pf::draw_text(kStatusTextX, kStatusTextY, "PS/2 键盘初始化失败！", 0xff0000, 0);
-        for (;;) {
-            asm volatile("hlt");
-        }
+        halt_forever();
     }
     interrupts::enable_keyboard_irq();
     serial::write("PS/2 keyboard initialized; IRQ1 enabled.\n");

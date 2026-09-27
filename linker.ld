@@ -2,6 +2,7 @@ ENTRY(kernel_entry)
 
 SECTIONS {
     . = 0x101000;
+    _kernel_start = .;
 
     .text : ALIGN(16) {
         *(.text .text.*)
@@ -19,6 +20,8 @@ SECTIONS {
         *(COMMON)
         *(.bss .bss.*)
     }
+
+    _kernel_end = .;
 
     /DISCARD/ : {
         *(.comment)
