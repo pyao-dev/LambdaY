@@ -91,11 +91,29 @@ void clear(ui32 color) {
     }
 
     const ui32 pixel = encode_pixel(color);
-    for (ui32 y = 0; y < framebuffer.height; ++y) {
-        volatile ui32* row = reinterpret_cast<volatile ui32*>(
-            framebuffer.address + static_cast<ui64>(y) * framebuffer.pixels_per_scanline * sizeof(ui32));
-        for (ui32 x = 0; x < framebuffer.width; ++x) {
-            row[x] = pixel;
+
+    // 优化：使用批量填充代替逐像素写入
+    // 先填充第一行
+    volatile ui32* first_row = reinterpret_cast<volatile ui32*>(framebuffer.address);
+    for (ui32 x = 0; x < framebuffer.width; ++x) {
+        first_row[x] = pixel;
+    }
+
+    // 如果每行像素数等于宽度，可以一次性填充整个framebuffer
+    if (framebuffer.pixels_per_scanline == framebuffer.width) {
+        const ui64     total_pixels = static_cast<ui64>(framebuffer.width) * framebuffer.height;
+        volatile ui32* all_pixels   = reinterpret_cast<volatile ui32*>(framebuffer.address);
+        for (ui64 i = framebuffer.width; i < total_pixels; ++i) {
+            all_pixels[i] = pixel;
+        }
+    } else {
+        // 否则逐行复制第一行的数据
+        for (ui32 y = 1; y < framebuffer.height; ++y) {
+            volatile ui32* row = reinterpret_cast<volatile ui32*>(
+                framebuffer.address + static_cast<ui64>(y) * framebuffer.pixels_per_scanline * sizeof(ui32));
+            for (ui32 x = 0; x < framebuffer.width; ++x) {
+                row[x] = pixel;
+            }
         }
     }
 }

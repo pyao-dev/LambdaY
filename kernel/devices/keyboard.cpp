@@ -35,51 +35,125 @@ constexpr ui32 kIoTimeout       = 100000;
 constexpr ui32 kCommandAttempts = 3;
 constexpr ui32 kQueueSize       = 256;
 
-volatile ui8 scancode_queue[kQueueSize] = {};
-volatile ui8 queue_head                 = 0;
-volatile ui8 queue_tail                 = 0;
-volatile ui8 ascii_queue[kQueueSize]    = {};
-volatile ui8 ascii_head                 = 0;
-volatile ui8 ascii_tail                 = 0;
+// 封装键盘状态，提升可维护性和清晰度
+struct KeyboardState {
+    // 扫描码队列
+    volatile ui8 scancode_queue[kQueueSize] = {};
+    volatile ui8 queue_head                 = 0;
+    volatile ui8 queue_tail                 = 0;
 
-bool extended_scancode = false;
-bool break_code        = false;
-bool pause_sequence    = false;
-ui8  pause_bytes       = 0;
-bool left_shift        = false;
-bool right_shift       = false;
-bool left_control      = false;
-bool right_control     = false;
-bool left_alt          = false;
-bool right_alt         = false;
-bool caps_lock         = false;
+    // ASCII 字符队列
+    volatile ui8 ascii_queue[kQueueSize] = {};
+    volatile ui8 ascii_head              = 0;
+    volatile ui8 ascii_tail              = 0;
 
-struct AsciiKey {
-    ui8  scancode;
+    // 扫描码解析状态
+    bool extended_scancode = false;
+    bool break_code        = false;
+    bool pause_sequence    = false;
+    ui8  pause_bytes       = 0;
+
+    // 修饰键状态
+    bool left_shift    = false;
+    bool right_shift   = false;
+    bool left_control  = false;
+    bool right_control = false;
+    bool left_alt      = false;
+    bool right_alt     = false;
+    bool caps_lock     = false;
+
+    void reset() {
+        queue_head        = 0;
+        queue_tail        = 0;
+        ascii_head        = 0;
+        ascii_tail        = 0;
+        extended_scancode = false;
+        break_code        = false;
+        pause_sequence    = false;
+        pause_bytes       = 0;
+        left_shift        = false;
+        right_shift       = false;
+        left_control      = false;
+        right_control     = false;
+        left_alt          = false;
+        right_alt         = false;
+        caps_lock         = false;
+    }
+};
+
+KeyboardState g_keyboard_state;
+
+struct AsciiMapping {
     char normal;
     char shifted;
+    bool valid;
 };
 
-constexpr AsciiKey kAsciiKeys[] = {
-    {0x0d, '\t', '\t'}, {0x0e, '`', '~'},       {0x15, 'q', 'Q'},   {0x16, '1', '!'}, {0x1a, 'z', 'Z'},
-    {0x1b, 's', 'S'},   {0x1c, 'a', 'A'},       {0x1d, 'w', 'W'},   {0x1e, '2', '@'}, {0x21, 'c', 'C'},
-    {0x22, 'x', 'X'},   {0x23, 'd', 'D'},       {0x24, 'e', 'E'},   {0x25, '4', '$'}, {0x26, '3', '#'},
-    {0x29, ' ', ' '},   {0x2a, 'v', 'V'},       {0x2b, 'f', 'F'},   {0x2c, 't', 'T'}, {0x2d, 'r', 'R'},
-    {0x2e, '5', '%'},   {0x31, 'n', 'N'},       {0x32, 'b', 'B'},   {0x33, 'h', 'H'}, {0x34, 'g', 'G'},
-    {0x35, 'y', 'Y'},   {0x36, '6', '^'},       {0x3a, 'm', 'M'},   {0x3b, 'j', 'J'}, {0x3c, 'u', 'U'},
-    {0x3d, '7', '&'},   {0x3e, '8', '*'},       {0x41, ',', '<'},   {0x42, 'k', 'K'}, {0x43, 'i', 'I'},
-    {0x44, 'o', 'O'},   {0x45, '0', ')'},       {0x46, '9', '('},   {0x49, '.', '>'}, {0x4a, '/', '?'},
-    {0x4b, 'l', 'L'},   {0x4c, ';', ':'},       {0x4d, 'p', 'P'},   {0x4e, '-', '_'}, {0x52, '\'', '"'},
-    {0x54, '[', '{'},   {0x55, '=', '+'},       {0x5a, '\n', '\n'}, {0x5b, ']', '}'}, {0x5d, '\\', '|'},
-    {0x66, '\b', '\b'}, {0x76, '\x1b', '\x1b'},
-};
+// 优化：使用直接数组索引替代线性搜索
+// 索引为 PS/2 扫描码集2 的扫描码值
+AsciiMapping kScancodeToAscii[256] = {};
+
+void initialize_scancode_map() {
+    kScancodeToAscii[0x0d] = {'\t', '\t', true};
+    kScancodeToAscii[0x0e] = {'`', '~', true};
+    kScancodeToAscii[0x15] = {'q', 'Q', true};
+    kScancodeToAscii[0x16] = {'1', '!', true};
+    kScancodeToAscii[0x1a] = {'z', 'Z', true};
+    kScancodeToAscii[0x1b] = {'s', 'S', true};
+    kScancodeToAscii[0x1c] = {'a', 'A', true};
+    kScancodeToAscii[0x1d] = {'w', 'W', true};
+    kScancodeToAscii[0x1e] = {'2', '@', true};
+    kScancodeToAscii[0x21] = {'c', 'C', true};
+    kScancodeToAscii[0x22] = {'x', 'X', true};
+    kScancodeToAscii[0x23] = {'d', 'D', true};
+    kScancodeToAscii[0x24] = {'e', 'E', true};
+    kScancodeToAscii[0x25] = {'4', '$', true};
+    kScancodeToAscii[0x26] = {'3', '#', true};
+    kScancodeToAscii[0x29] = {' ', ' ', true};
+    kScancodeToAscii[0x2a] = {'v', 'V', true};
+    kScancodeToAscii[0x2b] = {'f', 'F', true};
+    kScancodeToAscii[0x2c] = {'t', 'T', true};
+    kScancodeToAscii[0x2d] = {'r', 'R', true};
+    kScancodeToAscii[0x2e] = {'5', '%', true};
+    kScancodeToAscii[0x31] = {'n', 'N', true};
+    kScancodeToAscii[0x32] = {'b', 'B', true};
+    kScancodeToAscii[0x33] = {'h', 'H', true};
+    kScancodeToAscii[0x34] = {'g', 'G', true};
+    kScancodeToAscii[0x35] = {'y', 'Y', true};
+    kScancodeToAscii[0x36] = {'6', '^', true};
+    kScancodeToAscii[0x3a] = {'m', 'M', true};
+    kScancodeToAscii[0x3b] = {'j', 'J', true};
+    kScancodeToAscii[0x3c] = {'u', 'U', true};
+    kScancodeToAscii[0x3d] = {'7', '&', true};
+    kScancodeToAscii[0x3e] = {'8', '*', true};
+    kScancodeToAscii[0x41] = {',', '<', true};
+    kScancodeToAscii[0x42] = {'k', 'K', true};
+    kScancodeToAscii[0x43] = {'i', 'I', true};
+    kScancodeToAscii[0x44] = {'o', 'O', true};
+    kScancodeToAscii[0x45] = {'0', ')', true};
+    kScancodeToAscii[0x46] = {'9', '(', true};
+    kScancodeToAscii[0x49] = {'.', '>', true};
+    kScancodeToAscii[0x4a] = {'/', '?', true};
+    kScancodeToAscii[0x4b] = {'l', 'L', true};
+    kScancodeToAscii[0x4c] = {';', ':', true};
+    kScancodeToAscii[0x4d] = {'p', 'P', true};
+    kScancodeToAscii[0x4e] = {'-', '_', true};
+    kScancodeToAscii[0x52] = {'\'', '"', true};
+    kScancodeToAscii[0x54] = {'[', '{', true};
+    kScancodeToAscii[0x55] = {'=', '+', true};
+    kScancodeToAscii[0x5a] = {'\n', '\n', true};
+    kScancodeToAscii[0x5b] = {']', '}', true};
+    kScancodeToAscii[0x5d] = {'\\', '|', true};
+    kScancodeToAscii[0x66] = {'\b', '\b', true};
+    kScancodeToAscii[0x76] = {'\x1b', '\x1b', true};
+}
 
 bool is_letter(char character) {
     return character >= 'a' && character <= 'z';
 }
 
 bool is_control_active() {
-    return left_control || right_control;
+    return g_keyboard_state.left_control || g_keyboard_state.right_control;
 }
 
 char control_character(char character) {
@@ -114,95 +188,79 @@ void enqueue(volatile ui8* queue, volatile ui8& head, volatile ui8& tail, ui8 va
 }
 
 char ascii_for_scancode(ui8 scancode) {
-    for (const AsciiKey& key : kAsciiKeys) {
-        if (key.scancode != scancode) {
-            continue;
-        }
-
-        const bool shift = left_shift || right_shift;
-        if (is_letter(key.normal)) {
-            const bool uppercase = shift != caps_lock;
-            return uppercase ? key.shifted : key.normal;
-        }
-        return shift ? key.shifted : key.normal;
+    const AsciiMapping& mapping = kScancodeToAscii[scancode];
+    if (!mapping.valid) {
+        return '\0';
     }
-    return '\0';
-}
 
-void reset_state() {
-    extended_scancode = false;
-    break_code        = false;
-    pause_sequence    = false;
-    pause_bytes       = 0;
-    left_shift        = false;
-    right_shift       = false;
-    left_control      = false;
-    right_control     = false;
-    left_alt          = false;
-    right_alt         = false;
-    caps_lock         = false;
+    const bool shift = g_keyboard_state.left_shift || g_keyboard_state.right_shift;
+    if (is_letter(mapping.normal)) {
+        const bool uppercase = shift != g_keyboard_state.caps_lock;
+        return uppercase ? mapping.shifted : mapping.normal;
+    }
+    return shift ? mapping.shifted : mapping.normal;
 }
 
 void handle_scancode(ui8 scancode) {
-    if (pause_sequence) {
-        if (pause_bytes != 0) {
-            --pause_bytes;
+    if (g_keyboard_state.pause_sequence) {
+        if (g_keyboard_state.pause_bytes != 0) {
+            --g_keyboard_state.pause_bytes;
         }
-        if (pause_bytes == 0) {
-            pause_sequence = false;
+        if (g_keyboard_state.pause_bytes == 0) {
+            g_keyboard_state.pause_sequence = false;
         }
         return;
     }
     if (scancode == 0xe1) {
-        pause_sequence = true;
-        pause_bytes    = 7;
+        g_keyboard_state.pause_sequence = true;
+        g_keyboard_state.pause_bytes    = 7;
         return;
     }
     if (scancode == 0xe0) {
-        extended_scancode = true;
+        g_keyboard_state.extended_scancode = true;
         return;
     }
     if (scancode == 0xf0) {
-        break_code = true;
+        g_keyboard_state.break_code = true;
         return;
     }
 
-    const bool extended = extended_scancode;
-    const bool released = break_code;
-    extended_scancode   = false;
-    break_code          = false;
+    const bool extended                = g_keyboard_state.extended_scancode;
+    const bool released                = g_keyboard_state.break_code;
+    g_keyboard_state.extended_scancode = false;
+    g_keyboard_state.break_code        = false;
 
     if (extended) {
         if (scancode == 0x14) {
-            right_control = !released;
+            g_keyboard_state.right_control = !released;
         } else if (scancode == 0x11) {
-            right_alt = !released;
+            g_keyboard_state.right_alt = !released;
         }
         return;
     }
 
     switch (scancode) {
     case 0x12:
-        left_shift = !released;
+        g_keyboard_state.left_shift = !released;
         return;
     case 0x59:
-        right_shift = !released;
+        g_keyboard_state.right_shift = !released;
         return;
     case 0x14:
-        left_control = !released;
+        g_keyboard_state.left_control = !released;
         return;
     case 0x11:
-        left_alt = !released;
+        g_keyboard_state.left_alt = !released;
         return;
     case 0x58:
         if (!released) {
-            caps_lock = !caps_lock;
+            g_keyboard_state.caps_lock = !g_keyboard_state.caps_lock;
         }
         return;
     default:
         break;
     }
-    if (released || left_alt || right_alt) {
+    if (released || g_keyboard_state.left_alt || g_keyboard_state.right_alt) {
         return;
     }
 
@@ -213,7 +271,8 @@ void handle_scancode(ui8 scancode) {
     if (is_control_active()) {
         character = control_character(character);
     }
-    enqueue(ascii_queue, ascii_head, ascii_tail, static_cast<ui8>(character));
+    enqueue(g_keyboard_state.ascii_queue, g_keyboard_state.ascii_head, g_keyboard_state.ascii_tail,
+            static_cast<ui8>(character));
 }
 
 bool wait_for_input_buffer() {
@@ -298,11 +357,8 @@ bool write_configuration(ui8 configuration) {
 namespace keyboard {
 
 bool initialize() {
-    queue_head = 0;
-    queue_tail = 0;
-    ascii_head = 0;
-    ascii_tail = 0;
-    reset_state();
+    initialize_scancode_map();
+    g_keyboard_state.reset();
 
     if (!write_command(kDisableFirstPort) || !write_command(kDisableSecondPort)) {
         return false;
@@ -330,44 +386,44 @@ bool initialize() {
 }
 
 bool pop_scancode(ui8& scancode) {
-    const ui8 tail = queue_tail;
-    if (tail == queue_head) {
+    const ui8 tail = g_keyboard_state.queue_tail;
+    if (tail == g_keyboard_state.queue_head) {
         return false;
     }
 
-    scancode   = scancode_queue[tail];
-    queue_tail = static_cast<ui8>(tail + 1);
+    scancode                    = g_keyboard_state.scancode_queue[tail];
+    g_keyboard_state.queue_tail = static_cast<ui8>(tail + 1);
     return true;
 }
 
 bool has_scancode() {
-    return queue_head != queue_tail;
+    return g_keyboard_state.queue_head != g_keyboard_state.queue_tail;
 }
 
 bool pop_ascii(ui8& character) {
-    const ui8 tail = ascii_tail;
-    if (tail == ascii_head) {
+    const ui8 tail = g_keyboard_state.ascii_tail;
+    if (tail == g_keyboard_state.ascii_head) {
         return false;
     }
 
-    character  = ascii_queue[tail];
-    ascii_tail = static_cast<ui8>(tail + 1);
+    character                   = g_keyboard_state.ascii_queue[tail];
+    g_keyboard_state.ascii_tail = static_cast<ui8>(tail + 1);
     return true;
 }
 
 bool has_ascii() {
-    return ascii_head != ascii_tail;
+    return g_keyboard_state.ascii_head != g_keyboard_state.ascii_tail;
 }
 
 } // namespace keyboard
 
 extern "C" void keyboard_handle_irq() {
     const ui8 scancode = io::inb(kDataPort);
-    const ui8 head     = queue_head;
+    const ui8 head     = g_keyboard_state.queue_head;
     const ui8 next     = static_cast<ui8>(head + 1);
-    if (next != queue_tail) {
-        scancode_queue[head] = scancode;
-        queue_head           = next;
+    if (next != g_keyboard_state.queue_tail) {
+        g_keyboard_state.scancode_queue[head] = scancode;
+        g_keyboard_state.queue_head           = next;
     }
     handle_scancode(scancode);
     interrupts::send_master_eoi();

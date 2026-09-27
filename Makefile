@@ -46,17 +46,17 @@ kernel: $(KERNEL_BIN)
 
 $(OUT_DIR)/%.o: $(ROOT_DIR)/%.cpp
 	@mkdir -p "$(dir $@)"
-	@echo " CXX $< -> $@"
+	@echo " CXX $(patsubst $(ROOT_DIR)/%,%,$<) -> $(patsubst $(ROOT_DIR)/%,%,$@)"
 	@$(CXX) $(KERNEL_CXXFLAGS) -MF "$(@:.o=.d)" -c "$<" -o "$@"
 
 $(OUT_DIR)/%.asm.o: $(ROOT_DIR)/%.S
 	@mkdir -p "$(dir $@)"
-	@echo " AS  $< -> $@"
+	@echo " AS  $(patsubst $(ROOT_DIR)/%,%,$<) -> $(patsubst $(ROOT_DIR)/%,%,$@)"
 	@$(CC) $(KERNEL_ASFLAGS) -c "$<" -o "$@"
 
 $(KERNEL_BIN): $(KERNEL_OBJECTS) $(ROOT_DIR)/linker.ld
 	@mkdir -p "$(dir $@)"
-	@echo " LD $@"
+	@echo " LD  $(patsubst $(ROOT_DIR)/%,%,$@)"
 	@$(LD) $(KERNEL_LDFLAGS) $(KERNEL_OBJECTS) -o "$@"
 
 image: boot kernel
