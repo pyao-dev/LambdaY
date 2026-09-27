@@ -1,9 +1,14 @@
 #include <devices/interrupts.h>
 #include <devices/io.h>
+#include <devices/serial.h>
+#include <str.h>
 #include <types.h>
 
 extern "C" void interrupt_default_entry();
 extern "C" void interrupt_keyboard_entry();
+extern "C" void interrupt_invalid_opcode_entry();
+extern "C" void interrupt_general_protection_entry();
+extern "C" void interrupt_page_fault_entry();
 
 namespace {
 
@@ -103,6 +108,24 @@ ui64 keyboard_entry_address() {
     return address;
 }
 
+ui64 invalid_opcode_entry_address() {
+    ui64 address = 0;
+    asm volatile("lea interrupt_invalid_opcode_entry(%%rip), %0" : "=r"(address));
+    return address;
+}
+
+ui64 general_protection_entry_address() {
+    ui64 address = 0;
+    asm volatile("lea interrupt_general_protection_entry(%%rip), %0" : "=r"(address));
+    return address;
+}
+
+ui64 page_fault_entry_address() {
+    ui64 address = 0;
+    asm volatile("lea interrupt_page_fault_entry(%%rip), %0" : "=r"(address));
+    return address;
+}
+
 void set_gate(ui8 vector, ui64 address, ui16 selector) {
     IdtEntry& gate     = idt[vector];
     gate.offset_low    = static_cast<ui16>(address);
@@ -115,6 +138,25 @@ void set_gate(ui8 vector, ui64 address, ui16 selector) {
 }
 
 } // namespace
+
+extern "C" [[noreturn]] void interrupt_exception_handler(ui64 vector, ui64 error_code) {
+    serial::write("CPU exception: vector=");
+    serial::write(int2str(vector));
+    serial::write(" error=");
+    serial::write(int2str(error_code));
+    if (vector == 14) {
+        ui64 fault_address = 0;
+        asm volatile("mov %%cr2, %0" : "=r"(fault_address));
+        serial::write(" cr2=");
+        serial::write(int2str(fault_address));
+    }
+    serial::write("\n");
+
+    interrupts::disable();
+    for (;;) {
+        asm volatile("hlt");
+    }
+}
 
 namespace interrupts {
 
@@ -136,6 +178,9 @@ void initialize_idt() {
     for (ui32 vector = 0; vector < 256; ++vector) {
         set_gate(static_cast<ui8>(vector), default_address, selector);
     }
+    set_gate(6, invalid_opcode_entry_address(), selector);
+    set_gate(13, general_protection_entry_address(), selector);
+    set_gate(14, page_fault_entry_address(), selector);
     set_gate(kKeyboardVector, keyboard_entry_address(), selector);
 
     const Idtr idtr = {

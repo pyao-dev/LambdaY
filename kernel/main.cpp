@@ -90,24 +90,34 @@ extern "C" __attribute__((ms_abi, noreturn)) void kernel_entry(const BootInfo* b
     serial::write(int2str(boot_info->memory_map_count));
     serial::write("\n");
 
+    serial::write("Boot: initializing paging.\n");
     if (!memory::initialize_paging(boot_info)) {
         serial::write("Failed to initialize kernel paging.\n");
         halt_forever();
     }
+    serial::write("Boot: paging ready.\n");
+
+    serial::write("Boot: initializing physical memory.\n");
     if (!memory::initialize_physical(boot_info)) {
         serial::write("Failed to initialize physical memory allocator.\n");
         halt_forever();
     }
+    serial::write("Boot: physical memory ready.\n");
+
+    serial::write("Boot: initializing heap.\n");
     if (!memory::initialize_heap() || !run_memory_self_test()) {
         serial::write("Failed to initialize kernel heap.\n");
         halt_forever();
     }
+    serial::write("Boot: heap ready.\n");
     write_memory_stats();
 
+    serial::write("Boot: initializing graphics.\n");
     if (!graphics::initialize(boot_info)) {
         serial::write("Failed to initialize graphics.\n");
         halt_forever();
     }
+    serial::write("Boot: graphics ready.\n");
 
     ui32 screen_width  = graphics::get_width();
     ui32 screen_height = graphics::get_height();
@@ -116,22 +126,18 @@ extern "C" __attribute__((ms_abi, noreturn)) void kernel_entry(const BootInfo* b
     serial::write(int2str(screen_width));
     serial::write('x');
     serial::write(int2str(screen_height));
+    serial::write('\n');
 
-    serial::write("\nClear the screen and draw demo lines\n");
     graphics::clear(0);
-
-    /*
-    for (ui32 offset = 0; offset < line_length; ++offset) {
-        graphics::put_pixel(offset, 200, 0xff0000);
-        graphics::put_pixel(offset, 250, 0x00ff00);
-        graphics::put_pixel(offset, 300, 0x0000ff);
-    }
-    */
 
     pf::draw_text(kWelcomeTextX, kWelcomeTextY, "你好！欢迎来到 LambdaY 操作系统！这是：中英混排 Test 测试。");
 
+    serial::write("Boot: initializing interrupts.\n");
     interrupts::initialize_idt();
     interrupts::initialize_pic();
+    serial::write("Boot: interrupts ready.\n");
+
+    serial::write("Boot: initializing keyboard.\n");
     if (!keyboard::initialize()) {
         serial::write("Failed to initialize the PS/2 keyboard.\n");
         pf::draw_text(kStatusTextX, kStatusTextY, "PS/2 键盘初始化失败！", 0xff0000, 0);
@@ -139,9 +145,12 @@ extern "C" __attribute__((ms_abi, noreturn)) void kernel_entry(const BootInfo* b
     }
     interrupts::enable_keyboard_irq();
     serial::write("PS/2 keyboard initialized; IRQ1 enabled.\n");
+    serial::write("Boot: keyboard ready.\n");
 
     ui::Terminal terminal(screen_width, screen_height, kTerminalMarginX, kTerminalMarginY);
+    serial::write("Boot: terminal ready.\n");
     interrupts::enable();
+    serial::write("Boot: interrupts enabled.\n");
 
     pf::draw_text(kStatusTextX, kStatusTextY, "PS/2键盘初始化成功，现在你可以键入一些内容");
 
