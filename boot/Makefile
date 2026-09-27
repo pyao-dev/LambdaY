@@ -22,7 +22,7 @@ EFI_CFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -ffreestanding \
     -fno-stack-protector -fno-builtin -fshort-wchar -mno-red-zone \
     -fno-asynchronous-unwind-tables -fno-unwind-tables \
     -DGNU_EFI_USE_MS_ABI -I$(GNU_EFI_DIR)/inc -I$(GNU_EFI_DIR)/inc/x86_64 \
-    -I$(GNU_EFI_DIR)/inc/protocol
+    -I$(GNU_EFI_DIR)/inc/protocol -I$(ROOT_DIR)/include/global
 EFI_LDFLAGS := -nostdlib -z nocombreloc -shared -Bsymbolic \
     -T $(GNU_EFI_LINKER_SCRIPT) -L$(GNU_EFI_LIB_DIR) -L$(GNU_EFI_CRT_DIR)
 EFI_LIBS := -lefi -lgnuefi $(shell $(CC) -print-libgcc-file-name)

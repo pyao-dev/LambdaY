@@ -1,3 +1,4 @@
+#include <boot_info.h>
 #include <devices/interrupts.h>
 #include <devices/keyboard.h>
 #include <devices/serial.h>
@@ -18,12 +19,25 @@ constexpr ui32 kTerminalMarginY = 100;
 
 } // namespace
 
-extern "C" __attribute__((ms_abi, noreturn)) void kernel_entry(void*, void* system_table) {
+extern "C" __attribute__((ms_abi, noreturn)) void kernel_entry(const BootInfo* boot_info) {
     interrupts::disable();
     serial::initialize();
     serial::write("This is a message from KERNEL.BIN. Welcome!\n");
 
-    if (!graphics::initialize(system_table)) {
+    if (boot_info == nullptr || boot_info->magic != LAMBDAY_BOOT_INFO_MAGIC ||
+        boot_info->version != LAMBDAY_BOOT_INFO_VERSION || boot_info->size < sizeof(BootInfo) ||
+        boot_info->memory_map == nullptr || boot_info->memory_map_count == 0) {
+        serial::write("Invalid BootInfo received from BootLoader.\n");
+        for (;;) {
+            asm volatile("hlt");
+        }
+    }
+
+    serial::write("Memory map entries: ");
+    serial::write(int2str(boot_info->memory_map_count));
+    serial::write("\n");
+
+    if (!graphics::initialize(boot_info)) {
         serial::write("Failed to initialize graphics.\n");
         asm volatile("hlt");
     }

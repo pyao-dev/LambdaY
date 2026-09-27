@@ -54,9 +54,9 @@ make check-tools
 
 ### Boot Flow
 1. UEFI firmware loads `BOOTX64.EFI` from the EFI system partition
-2. Bootloader (`boot/boot.c`) reads `kernel.bin` from the root of the FAT filesystem
-3. Bootloader uses `LoadImage` and `StartImage` to transfer control to `kernel_entry`
-4. Kernel initializes in this order: serial → graphics → interrupts → keyboard → terminal
+2. Bootloader (`boot/boot.c`) reads and relocates `kernel.bin` from the root of the FAT filesystem
+3. Bootloader captures GOP and the UEFI memory map, calls `ExitBootServices`, then jumps to `kernel_entry(BootInfo*)`
+4. Kernel initializes in this order: serial → validate BootInfo → graphics → interrupts → keyboard → terminal
 
 ### Module Structure
 
@@ -91,6 +91,7 @@ make check-tools
 - Kernel loads at physical address 0x100000 (1MB)
 - Entry point at 0x101000
 - Uses GOP framebuffer for graphics (linear framebuffer direct access)
+- BootLoader passes an EFI-independent `BootInfo` containing framebuffer metadata and a copied memory map
 
 **Interrupt handling:**
 - IDT configured for 256 entries

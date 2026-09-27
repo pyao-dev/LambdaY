@@ -23,11 +23,9 @@ KERNEL_OBJECTS := $(CPP_OBJECTS) $(ASM_OBJECTS)
 KERNEL_BIN := $(OUT_DIR)/kernel.bin
 
 KERNEL_CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Werror -ffreestanding \
-    -fno-stack-protector -fno-exceptions -fno-rtti -fno-use-cxa-atexit \
+	-fno-stack-protector -fno-exceptions -fno-rtti -fno-use-cxa-atexit \
 	-fno-asynchronous-unwind-tables -fno-unwind-tables -fPIE -MMD -MP -mno-red-zone \
-	-m64 -DGNU_EFI_USE_MS_ABI -I$(ROOT_DIR)/include/global \
-	-I$(ROOT_DIR)/include/kernel -I$(ROOT_DIR)/gnu-efi/inc \
-	-I$(ROOT_DIR)/gnu-efi/inc/x86_64 -I$(ROOT_DIR)/gnu-efi/inc/protocol
+	-m64 -I$(ROOT_DIR)/include/global -I$(ROOT_DIR)/include/kernel
 KERNEL_LDFLAGS := -mi386pep -nostdlib -T $(ROOT_DIR)/linker.ld \
     --subsystem 10 --image-base 0x100000
 KERNEL_ASFLAGS := -m64 -ffreestanding -fPIE -mno-red-zone
